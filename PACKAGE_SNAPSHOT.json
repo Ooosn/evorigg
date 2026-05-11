@@ -1,0 +1,26 @@
+﻿{
+    "includes":  [
+                     "src/evorig_next",
+                     "selected scripts",
+                     "configs/frozen",
+                     "docs current + claude handoff",
+                     "tools viewer workspace",
+                     "tests",
+                     "pyproject/readme/AGENTS"
+                 ],
+    "created_from":  "D:\\Evorig",
+    "excludes":  [
+                     "mygs data/results contents",
+                     "paper",
+                     "large PDFs",
+                     "assets",
+                     "tmp debug folders",
+                     ".git"
+                 ],
+    "import_paths":  {
+                         "actionmesh_real_glb":  "scripts/import_real_glb_sample.py",
+                         "unirig_dynamic_default":  "scripts/import_unirig_dynamic_glb_sample.py"
+                     },
+    "created_at":  "2026-05-12T01:52:08",
+    "package":  "evorig_claude_code_upload_20260512"
+}

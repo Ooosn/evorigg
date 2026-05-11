@@ -1,0 +1,84 @@
+phase1:
+  steps: 100
+  frame_batch_size: 32
+  seed_count_scale: 5.0
+
+  root_trans_init_mode: centroid
+  freeze_root_rest_joint: true
+  separate_motion_root: true
+  gaussian_kernel_mahal_cutoff_sq: 0.0
+  support_mass_eps: 1.0e-8
+  fallback_low_support_to_bone_endpoint: true
+  fallback_support_mass_threshold: 1.0e-8
+  trace_interval_steps: 50
+
+  initial_lambda_policy: freeze_forever
+  lambda_min: -0.2
+  lambda_max: 1.2
+  phase1_force_global_lambda_bounds: true
+  ownership_mode: endpoint_cut
+  lambda_thaw_start_step: 1
+  lambda_thaw_target: densified
+  parent_child_mix_start_step: -1
+  sh_start_step: 1
+  sh_coeff_count: 4
+
+  rest_joint_start_step: 1
+  lr_rest_joints: 0.0006
+  loss_rest_joint_anchor: 1.0
+  project_rest_joints_inside_after_step: true
+  rest_joint_projection_padding: 0.003
+
+  loss_illegal_support: 0.20
+  loss_gaussian_illegal_coverage: 0.0
+  illegal_support_tau: 0.0
+  illegal_support_margin: 0.99
+  loss_pcjs: 0.10
+  pcjs_section_lambda: 0.10
+  loss_posed_joint_inside: 0.05
+  loss_posed_bone_inside_mesh: 0.05
+  posed_bone_inside_samples: 4
+  loss_posed_joint_surface_clearance: 0.20
+  posed_joint_surface_clearance_ratio: 0.06
+  loss_rest_joint_inside: 0.35
+  loss_rest_joint_surface_clearance: 0.20
+  rest_joint_surface_clearance_ratio: 0.06
+  initial_seed_prune_outside_mesh: true
+  densify_seed_prune_outside_mesh: true
+
+  loss_vertex_recon: 1.0
+  loss_vertex_acceleration: 1.0
+  loss_temporal_smoothness: 0.10
+  loss_scale_anchor: 0.08
+  loss_bone_scale_consistency: 0.08
+  loss_bone_cov_offdiag: 0.08
+  loss_bone_radial_symmetry: 0.04
+  loss_bone_scale_band: 0.08
+  loss_mesh_edge_length_floor: 4.0
+  mesh_edge_length_floor_ratio: 0.93
+  loss_bone_radial_distance_shrink: 0.12
+  bone_radial_distance_shrink_ratio: 0.95
+  loss_gaussian_sh_reg: 0.001
+
+  phase1_scale_formula: cross_section_inner_ring
+  phase1_cross_section_angle_bins: 64
+  phase1_cross_section_min_bins: 10
+
+  lr_pose: 0.002
+  lr_root: 0.0005
+  lr_field: 0.001
+  lr_lambda_initial: 0.0
+  lr_lambda_initial_thawed: 0.001
+  lr_lambda_densified: 0.001
+  lr_rot: 0.001
+  lr_scale: 0.001
+  lr_opacity: 0.001
+  lr_value: 0.001
+  lr_offset: 0.0
+  lr_sh: 0.001
+
+  densify_stages: []
+
+source:
+  base_config: configs/frozen/evorig_next_phase1b_restrefine_default.yaml
+  note: "Phase1C continues from Phase1B: rest-joint refinement stays active while vertex acceleration and stronger temporal smoothing suppress fast-motion shaking."

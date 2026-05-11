@@ -1,0 +1,35 @@
+# EvoRigNext Phase3 default topology-fixed refinement protocol.
+# This records the accepted default command parameters for
+# scripts/run_evorig_next_phase3_round1.py.
+
+script: scripts/run_evorig_next_phase3_round1.py
+implementation: src/evorig_next
+phase1_default_config: configs/frozen/evorig_next_phase1_final500_supportloss_default.yaml
+phase2_default_config: configs/frozen/evorig_next_phase2_lineage_sibling_fast_default.yaml
+
+runner:
+  device: cuda
+  steps: 200
+  skip_viewers_for_training_runs: true
+  save_final_topology_signals: false
+
+refinement:
+  sh_coeff_count: 16
+  lr_sh: 0.002
+  loss_gaussian_sh_reg: 0.0005
+  freeze_base_params: false
+  freeze_rest_joints: true
+  enable_gaussian_offset: true
+  offset_start_step: 0
+  gaussian_offset_target: all
+  lr_offset: 0.0005
+  loss_gaussian_offset_anchor: 0.05
+
+jlg_losses:
+  loss_illegal_support: 0.20
+  loss_gaussian_illegal_coverage: 0.0
+  illegal_support_tau: 0.0
+
+performance:
+  skip_frozen_only_losses: true
+  final_topology_signal_is_diagnostic_only: true

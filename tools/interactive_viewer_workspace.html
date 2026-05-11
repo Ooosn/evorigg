@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EvoRig Viewer Workspace</title>
+  <style>
+    :root {
+      --bg: #f4f1ea;
+      --panel: #fbfaf6;
+      --line: #d8d0c2;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #c2410c;
+      --accent-soft: #ffedd5;
+      --shadow: 0 10px 35px rgba(17, 24, 39, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(194, 65, 12, 0.12), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(2, 132, 199, 0.08), transparent 24%),
+        var(--bg);
+      min-height: 100vh;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      min-height: 100vh;
+      gap: 0;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(251, 250, 246, 0.92);
+      backdrop-filter: blur(10px);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .dropzone {
+      border: 2px dashed var(--line);
+      border-radius: 18px;
+      padding: 18px 16px;
+      background: rgba(255, 255, 255, 0.62);
+      transition: all 0.16s ease;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-1px);
+    }
+
+    .dropzone strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .dropzone .hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    .pick-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: white;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button:hover,
+    .pick-button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .pick-button input {
+      display: none;
+    }
+
+    .list-wrap {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .list-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .viewer-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: auto;
+      min-height: 0;
+    }
+
+    .viewer-item {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .viewer-item:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    .viewer-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: var(--shadow);
+    }
+
+    .viewer-name {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      word-break: break-word;
+    }
+
+    .viewer-meta {
+      font-size: 11px;
+      color: var(--muted);
+      word-break: break-word;
+      line-height: 1.45;
+    }
+
+    .main {
+      padding: 16px;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .statusbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .viewer-frame {
+      width: 100%;
+      flex: 1;
+      min-height: 72vh;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: white;
+      box-shadow: var(--shadow);
+    }
+
+    .empty {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      border: 1px dashed var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.52);
+      color: var(--muted);
+      text-align: center;
+      padding: 28px;
+    }
+
+    .empty strong {
+      display: block;
+      color: var(--text);
+      font-size: 20px;
+      margin-bottom: 8px;
+    }
+
+    @media (max-width: 960px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .viewer-frame,
+      .empty {
+        min-height: 58vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div>
+        <h1 class="title">Viewer Workspace</h1>
+        <p class="subtitle">
+          Start empty, drag one or more interactive HTML viewers in, then click any entry on the left to show it.
+        </p>
+      </div>
+
+      <div id="dropzone" class="dropzone">
+        <strong>Drop HTML viewer files here</strong>
+        <div class="hint">
+          Supports `.html` / `.htm` files. You can also click “Pick Files” to choose generated viewer files from
+          `visuals/interactive/`.
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label class="pick-button">
+          Pick Files
+          <input id="file-input" type="file" accept=".html,.htm,text/html" multiple />
+        </label>
+        <button id="clear-button" type="button">Clear All</button>
+      </div>
+
+      <div class="list-wrap">
+        <div class="list-title">
+          <span>Loaded Viewers</span>
+          <span id="viewer-count">0</span>
+        </div>
+        <ul id="viewer-list" class="viewer-list"></ul>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="statusbar">
+        <div id="current-label">No viewer selected</div>
+        <div id="current-meta">Drop a file to begin</div>
+      </div>
+      <div id="empty-state" class="empty">
+        <div>
+          <strong>Nothing loaded yet</strong>
+          Drag interactive viewer HTML files into the page, then click any item in the list to display it here.
+        </div>
+      </div>
+      <iframe id="viewer-frame" class="viewer-frame" style="display:none;" title="interactive-viewer"></iframe>
+    </main>
+  </div>
+
+  <script>
+    const state = {
+      items: [],
+      selectedId: null,
+    };
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file-input");
+    const clearButton = document.getElementById("clear-button");
+    const viewerList = document.getElementById("viewer-list");
+    const viewerCount = document.getElementById("viewer-count");
+    const currentLabel = document.getElementById("current-label");
+    const currentMeta = document.getElementById("current-meta");
+    const emptyState = document.getElementById("empty-state");
+    const viewerFrame = document.getElementById("viewer-frame");
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB"];
+      let value = bytes;
+      let index = 0;
+      while (value >= 1024 && index < units.length - 1) {
+        value /= 1024;
+        index += 1;
+      }
+      return `${value.toFixed(value >= 100 || index === 0 ? 0 : 1)} ${units[index]}`;
+    }
+
+    function fileKey(file) {
+      return [file.name, file.size, file.lastModified].join("::");
+    }
+
+    function ensureHtml(file) {
+      const name = (file.name || "").toLowerCase();
+      return name.endsWith(".html") || name.endsWith(".htm");
+    }
+
+    function addFiles(files) {
+      let firstNewId = null;
+      for (const file of files) {
+        if (!ensureHtml(file)) continue;
+        const id = fileKey(file);
+        if (state.items.some((item) => item.id === id)) continue;
+        const item = {
+          id,
+          name: file.name,
+          size: file.size,
+          lastModified: file.lastModified,
+          objectUrl: URL.createObjectURL(file),
+        };
+        state.items.push(item);
+        if (firstNewId === null) firstNewId = id;
+      }
+      if (state.selectedId === null && firstNewId !== null) {
+        state.selectedId = firstNewId;
+      }
+      render();
+    }
+
+    function removeAll() {
+      for (const item of state.items) {
+        URL.revokeObjectURL(item.objectUrl);
+      }
+      state.items = [];
+      state.selectedId = null;
+      render();
+    }
+
+    function selectItem(id) {
+      state.selectedId = id;
+      render();
+    }
+
+    function renderList() {
+      viewerList.innerHTML = "";
+      for (const item of state.items) {
+        const li = document.createElement("li");
+        li.className = `viewer-item${item.id === state.selectedId ? " active" : ""}`;
+        li.addEventListener("click", () => selectItem(item.id));
+
+        const name = document.createElement("div");
+        name.className = "viewer-name";
+        name.textContent = item.name;
+        li.appendChild(name);
+
+        const meta = document.createElement("div");
+        meta.className = "viewer-meta";
+        meta.textContent = `${formatBytes(item.size)} · ${new Date(item.lastModified).toLocaleString()}`;
+        li.appendChild(meta);
+
+        viewerList.appendChild(li);
+      }
+      viewerCount.textContent = String(state.items.length);
+    }
+
+    function renderFrame() {
+      const selected = state.items.find((item) => item.id === state.selectedId) || null;
+      if (!selected) {
+        emptyState.style.display = "grid";
+        viewerFrame.style.display = "none";
+        viewerFrame.src = "about:blank";
+        currentLabel.textContent = "No viewer selected";
+        currentMeta.textContent = "Drop a file to begin";
+        return;
+      }
+      emptyState.style.display = "none";
+      viewerFrame.style.display = "block";
+      viewerFrame.src = selected.objectUrl;
+      currentLabel.textContent = selected.name;
+      currentMeta.textContent = `${formatBytes(selected.size)} · ${new Date(selected.lastModified).toLocaleString()}`;
+    }
+
+    function render() {
+      renderList();
+      renderFrame();
+    }
+
+    function preventDefaults(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+      document.addEventListener(eventName, preventDefaults, false);
+    });
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, () => dropzone.classList.add("dragover"), false);
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, () => dropzone.classList.remove("dragover"), false);
+    });
+
+    dropzone.addEventListener("drop", (event) => {
+      const files = Array.from(event.dataTransfer.files || []);
+      addFiles(files);
+    });
+
+    fileInput.addEventListener("change", (event) => {
+      const files = Array.from(event.target.files || []);
+      addFiles(files);
+      event.target.value = "";
+    });
+
+    clearButton.addEventListener("click", () => removeAll());
+
+    render();
+  </script>
+</body>
+</html>

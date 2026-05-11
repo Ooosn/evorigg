@@ -1,0 +1,131 @@
+# EvoRig Phase1A default, 2026-05-10.
+# Historical filename kept for compatibility. Current Phase1 mainline is
+# A800 -> B200 -> C100, with Phase1A fixed-rest and JLG/joint-boundary losses
+# enabled.
+
+phase1:
+  steps: 800
+  frame_batch_size: 32
+  seed_count_scale: 5.0
+  initial_lambda_policy: freeze_forever
+  lambda_min: -0.2
+  lambda_max: 1.2
+  phase1_force_global_lambda_bounds: true
+  lambda_thaw_start_step: 301
+  lambda_thaw_target: densified
+
+  ownership_mode: endpoint_cut
+  ownership_midpoint: 0.80
+  ownership_slope: 0.08
+
+  gaussian_kernel_mahal_cutoff_sq: 0.0
+  support_mass_eps: 1.0e-8
+  fallback_low_support_to_bone_endpoint: true
+  fallback_support_mass_threshold: 1.0e-8
+  illegal_support_tau: 0.0
+  illegal_support_margin: 0.99
+
+  loss_vertex_recon: 1.0
+  loss_temporal_smoothness: 0.05
+  loss_illegal_support: 0.20
+  loss_gaussian_illegal_coverage: 0.0
+  loss_pcjs: 0.10
+  pcjs_section_lambda: 0.10
+  loss_posed_joint_inside: 0.05
+  loss_posed_bone_inside_mesh: 0.05
+  posed_bone_inside_samples: 4
+  loss_posed_joint_surface_clearance: 0.20
+  posed_joint_surface_clearance_ratio: 0.06
+  loss_rest_joint_inside: 0.35
+  loss_rest_joint_surface_clearance: 0.20
+  rest_joint_surface_clearance_ratio: 0.06
+  initial_seed_prune_outside_mesh: true
+  densify_seed_prune_outside_mesh: true
+  project_rest_joints_inside_after_step: true
+  rest_joint_projection_padding: 0.003
+  loss_bone_radial_distance_shrink: 0.12
+  bone_radial_distance_shrink_ratio: 0.95
+  loss_mesh_edge_length_floor: 4.0
+  mesh_edge_length_floor_ratio: 0.93
+
+  rest_joint_start_step: 999999
+  loss_rest_joint_anchor: 0.0
+  sh_start_step: 301
+  sh_coeff_count: 4
+  loss_gaussian_sh_reg: 0.001
+
+  loss_scale_anchor: 0.08
+  loss_bone_scale_consistency: 0.08
+  loss_bone_cov_offdiag: 0.08
+  loss_bone_radial_symmetry: 0.04
+  loss_bone_scale_band: 0.08
+  phase1_scale_formula: cross_section_inner_ring
+  phase1_radial_sigma_divisor: 3.0
+  phase1_radial_extent_quantile: 1.0
+  phase1_radial_patch_connected_component: true
+  phase1_cross_section_angle_bins: 64
+  phase1_cross_section_min_bins: 10
+  phase1_axial_three_center_divisor: 3.0
+  phase1_axial_min_radial_ratio: 0.5
+  phase1_formula_log_scale_min: -8.0
+  phase1_formula_log_scale_max: 0.5
+
+  init_log_opacity: -2.0
+  lr_pose: 0.005
+  lr_root: 0.001
+  lr_field: 0.004
+  lr_lambda_initial: 0.0
+  lr_lambda_initial_thawed: 0.004
+  lr_lambda_densified: 0.004
+  lr_rot: 0.004
+  lr_scale: 0.004
+  lr_opacity: 0.004
+  lr_value: 0.004
+  lr_rest_joints: 0.0
+  lr_sh: 0.004
+  root_trans_init_mode: centroid
+  freeze_root_rest_joint: true
+  separate_motion_root: true
+  trace_interval_steps: 50
+
+  densify_stages:
+    - warm_steps: 60
+      settle_steps: 40
+      max_bones: 12
+      seeds_per_bone: 4
+    - warm_steps: 60
+      settle_steps: 40
+      max_bones: 12
+      seeds_per_bone: 4
+    - warm_steps: 60
+      settle_steps: 40
+      max_bones: 12
+      seeds_per_bone: 4
+
+init_overrides:
+  centerline_axial_scale_factor: 3.3
+  centerline_radial_scale_factor: 0.3333333333333333
+
+source:
+  base_config: configs/frozen/evorig_next_base_init_default.yaml
+  changed_from_source:
+    steps: 800
+    frame_batch_size: 32
+    loss_illegal_support: 0.20
+    loss_gaussian_illegal_coverage: 0.0
+    illegal_support_tau: 0.0
+    root_trans_init_mode: centroid
+    freeze_root_rest_joint: true
+    separate_motion_root: true
+    phase1_scale_formula: cross_section_inner_ring
+    trace_interval_steps: 50
+    rest_joint_start_step: 999999
+    lr_rest_joints: 0.0
+    loss_posed_bone_inside_mesh: 0.05
+    project_rest_joints_inside_after_step: true
+    loss_posed_joint_surface_clearance: 0.20
+    posed_joint_surface_clearance_ratio: 0.06
+    loss_rest_joint_inside: 0.35
+    loss_rest_joint_surface_clearance: 0.20
+    rest_joint_surface_clearance_ratio: 0.06
+  note: "Phase1A fixed-rest stage for the current A800 -> B200 -> C100 protocol. JLG and joint-boundary losses are not phase-specific."

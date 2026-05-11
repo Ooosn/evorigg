@@ -1,0 +1,82 @@
+{
+  "package_name": "claude_ready_handoff_20260512",
+  "purpose": "Claude Code handoff package for the current EvoRig repo state",
+  "package_scope": "handoff docs and reproducibility commands only; not a full source-code or dataset snapshot",
+  "repo_root": "d:/Evorig",
+  "active_workline": {
+    "name": "EvoRig",
+    "implementation_dir": "src/evorig_next"
+  },
+  "required_docs": [
+    "docs/current_system_zh.md",
+    "docs/current_workline_zh.md",
+    "docs/experiment_guardrails_zh.md",
+    "docs/evorig_next_strict_runbook_zh.md",
+    "docs/claude_code_repo_guide_zh.md",
+    "docs/claude_experiment_handoff_zh.md",
+    "readme.md"
+  ],
+  "active_configs": [
+    "configs/frozen/evorig_next_base_init_default.yaml",
+    "configs/frozen/evorig_next_phase1_final500_supportloss_default.yaml",
+    "configs/frozen/evorig_next_phase1b_restrefine_default.yaml",
+    "configs/frozen/evorig_next_phase1c_smooth_default.yaml",
+    "configs/frozen/evorig_next_phase2_lineage_sibling_fast_default.yaml",
+    "configs/frozen/evorig_next_phase3_locked_default.yaml"
+  ],
+  "active_runners": [
+    "scripts/check_evorig_environment.py",
+    "scripts/prepare_unirig_window_asset.py",
+    "scripts/import_unirig_dynamic_glb_sample.py",
+    "scripts/run_evorig_next_phase1abc.py",
+    "scripts/run_evorig_next_phase2_round1.py",
+    "scripts/run_evorig_next_phase3_round1.py"
+  ],
+  "supported_import_paths": {
+    "unirig_dynamic_default": {
+      "entrypoint": "scripts/import_unirig_dynamic_glb_sample.py",
+      "source_root": "E:/evorig_unirig/<mesh_name>/dynamic_mesh.glb",
+      "requires": [
+        "dynamic_mesh.glb",
+        "rigged.glb",
+        "skeleton.fbx",
+        "skin.fbx"
+      ],
+      "semantics": "rigged.glb provides aligned joints and skin; skeleton.fbx only overlays Blender use_connect connectivity"
+    },
+    "actionmesh_real_glb_separate": {
+      "entrypoint": "scripts/import_real_glb_sample.py",
+      "semantics": "separate old/actionmesh-compatible path for explicit animated GLB plus rigged GLB inputs; not the default UniRig path"
+    }
+  },
+  "must_install": [
+    "numpy",
+    "PyYAML",
+    "torch",
+    "tqdm",
+    "trimesh",
+    "scipy",
+    "open3d",
+    "plotly",
+    "Blender 5.0 or explicit --blender-path"
+  ],
+  "must_not_fallback": [
+    "no CPU fallback for official runs",
+    "no missing-module fallback",
+    "no viewer semantic fallback",
+    "no skeleton-only sample import for official UniRig dynamic runs",
+    "no skeleton/raw_data.npz fallback",
+    "no old double_knife sample variants v1/v2/v3/connected_v4",
+    "no legacy code path or legacy frozen config"
+  ],
+  "double_knife": {
+    "authoritative_sample": "mygs/demo_data/evorig_unirig_windows_round1/double_knife_f31_60_rigged_connected_v1",
+    "invalid_current_run_reason": "latest prior phase1/phase2 clean runs and JLG sweeps used old or skeleton-only samples",
+    "invalid_run_paths": [
+      "mygs/results/double_knife_phase1_clean_connected_round3/phase1abc_summary.json",
+      "mygs/results/double_knife_phase2_clean_connected_round3/phase2_from_clean3_c_oneupdate/phase2_entry_summary.json",
+      "mygs/results/double_knife_jlg_weight_sweep_round1"
+    ]
+  },
+  "one_mesh_rule": true
+}

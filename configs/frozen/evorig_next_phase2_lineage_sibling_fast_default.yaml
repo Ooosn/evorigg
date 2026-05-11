@@ -1,0 +1,83 @@
+# EvoRigNext Phase2 default topology-evolution protocol.
+# This file records the accepted default command parameters; the runner's
+# argparse defaults match these values unless explicitly overridden.
+
+script: scripts/run_evorig_next_phase2_round1.py
+implementation: src/evorig_next
+phase1_default_config: configs/frozen/evorig_next_phase1_final500_supportloss_default.yaml
+
+runner:
+  device: cuda
+  phase2_schedule: true
+  phase2_schedule_max_updates: 4
+  phase2_topology_interval_steps: 100
+  phase2_new_seeds_per_bone: 8
+  skip_viewers_for_training_runs: true
+
+topology:
+  topology_support_sigma: 5.0
+  vertex_error_quantile: 0.80
+  wrong_coverage_error_quantile: 0.50
+  coverage_quantile: 0.05
+  coverage_abs_threshold: 0.0
+  wrong_coverage_ratio: 0.35
+  component_min_vertices: 10
+  component_min_vertices_reference_area: 3.9673382939115642
+  component_min_vertices_reference_vertex_count: 19869
+  component_min_vertices_min: 4
+  component_merge_hops: 2
+  max_branch_components: 32
+  topology_max_branch_per_update: 3
+  topology_max_split_per_update: 3
+  topology_noop_stop_patience: 2
+
+seed_joint_repair:
+  enabled: true
+  variant: center_capB
+  max_per_update: 2
+  max_components: 16
+  min_vertices: 24
+  min_vertices_reference_area: 3.9673382939115642
+  min_vertices_reference_vertex_count: 19869
+  min_vertices_min: 8
+  min_neighbor_fraction: 0.80
+  min_fault_fraction: 0.50
+  cap_sample_radius_ratio: 0.16
+  inside_min_fraction: 0.70
+  min_inside_improvement: 0.05
+
+branch:
+  min_global_error_mass_fraction: 0.03
+  min_wrong_fraction: 0.70
+  min_uncovered_fraction: 0.80
+  min_score_fraction_of_best: 0.08
+  component_overlap_reject_fraction: 0.25
+  accept_max_post_seed_fraction: 0.50
+  accept_max_post_fault_fraction: 0.50
+  min_path_points: 2
+  segment_refine_inside_fraction: 0.75
+  segment_refine_max_points: 10
+  max_intermediate_points: 4
+  tip_target_query_k: 192
+  tip_target_radius_voxels: 3.0
+  tip_target_radius_ratio: 0.06
+  tip_target_distance_weight: 1.0
+  long_segment_refine: true
+  long_segment_max_arc_fraction: 0.48
+  path_clearance_weight: 2.0
+  path_clearance_power: 1.0
+
+split:
+  inside_min_fraction: 0.75
+
+phase2_losses:
+  loss_illegal_support: 0.20
+  loss_gaussian_illegal_coverage: 0.0
+  illegal_support_tau: 0.0
+  illegal_support_margin: 0.99
+
+performance:
+  cache_voxel_path_field: true
+  skip_initial_signal_export_when_scheduled: true
+  reuse_schedule_final_signal_and_checkpoint: true
+  split_selection_uses_split_only_signals: true
