@@ -1,0 +1,338 @@
+seed: 7
+
+training:
+  steps: 300
+  frame_batch_size: null
+  rest_warmup_local_steps: 0
+  vertex_batch_size: null
+  vertex_batch_mode: motion_weighted
+  vertex_batch_uniform_floor: 0.02
+  support_update_interval: 20
+  topology_update_interval: 20
+  log_interval: 10
+  progress_schedule:
+    rest_warmup_end_progress: 0.0
+    warmup_end_progress: 0.1818
+    support_start_progress: 0.1818
+    topology_start_progress: 0.1818
+    prune_start_progress: 0.2727
+    topology_end_margin_progress: 0.0909
+
+optimizer:
+  betas: [0.9, 0.999]
+  weight_decay: 0.0
+  lr:
+    skeleton: 0.0029333333333333334
+    pose: 0.005866666666666667
+    root: 0.0014666666666666667
+    gaussian: 0.0044
+
+loss:
+  vertex_recon: 1.0
+  temporal_smoothness: 0.05
+  scale_regularization: 0.0
+  skeleton_anchor: 0.30
+  joint_inside_mesh: 0.25
+  joint_inside_surface_tol: 0.003
+  joint_mesh_projection_eps: 0.003
+  inside_direction_count: 12
+  joint_surface_clearance: 0.0
+  joint_surface_clearance_ratio: 0.05
+  posed_inside_target_mesh: gt
+  posed_joint_inside_mesh: 0.0
+  posed_joint_inside_root_weight: 0.25
+  posed_joint_inside_surface_tol: 0.003
+  posed_joint_inside_direction_count: 12
+  posed_joint_interior_consistency: 0.02
+  posed_joint_interior_consistency_target_mesh: pred
+  posed_joint_interior_direction_count: 12
+  posed_joint_surface_clearance: 0.0
+  posed_joint_surface_clearance_ratio: 0.05
+  posed_bone_inside_mesh: 0.0
+  posed_bone_inside_samples: 4
+  posed_bone_inside_surface_tol: 0.003
+  posed_bone_inside_direction_count: 12
+  bone_direction_consistency: 0.02
+  bone_direction_anisotropy_threshold: 0.1
+  gaussian_topk_isolation: 0.0
+  gaussian_topk_isolation_start_progress: 0.0
+  gaussian_topk_isolation_keep_topk: 2
+  gaussian_topk_isolation_max_extra_mass: 0.05
+  gaussian_top2_isolation: 0.0
+  gaussian_top2_isolation_max_third_mass: 0.05
+  gaussian_inside_mesh: 0.0
+  gaussian_inside_mesh_start_progress: 0.0
+  gaussian_inside_sigma_radius: 1.0
+  gaussian_inside_surface_tol: 0.003
+  gaussian_inside_direction_count: 12
+  gaussian_inside_center_weight: 0.25
+  gaussian_connectivity: 0.0
+  gaussian_connectivity_start_progress: 0.0
+  gaussian_connectivity_threshold: 0.05
+  gaussian_ownership_anchor: 0.0
+  gaussian_ownership_anchor_start_progress: 0.0
+  gaussian_ownership_anchor_end_progress: 0.0
+  gaussian_ownership_anchor_target_mode: bone_endpoint_blend
+  joint_incident_control: 0.0
+  joint_incident_control_floor: 0.25
+  joint_incident_control_start_progress: 0.0
+  joint_incident_control_end_progress: 0.0
+  joint_incident_control_old_only: true
+  joint_incident_control_hotspot_topk: 0
+  joint_incident_control_hotspot_min_vertices: 128
+
+init:
+  layout_mode: centerline_uniform
+  seed_count: 72
+  seed_vertex_ratio: 0.0
+  knn_k: 48
+  coverage_min: 0.0001
+  coverage_repair_max_iters: 4
+  coverage_add_per_bone: 6
+  coverage_frontier_min_distance_ratio: 0.04
+  log_scale_min: -3.0
+  log_scale_max: 0.5
+  centerline_min_seeds_per_bone: 10
+  endpoint_extension_ratio: 0.35
+  endpoint_extension_min_ratio: 0.08
+  endpoint_extension_max_ratio: 0.75
+  global_lambda_min: null
+  global_lambda_max: null
+  longitudinal_scale_min_ratio: 2.5
+  centerline_lambda_window_scale: 1.25
+  centerline_patch_min_vertices: 12
+  centerline_knn_k: 48
+  centerline_axial_scale_factor: 1.35
+  centerline_radial_scale_factor: 0.45
+  centerline_min_radial_scale_ratio: 0.015
+  seed_log_opacity: -2.0
+  branch_new_bone_seed_count: 16
+  branch_allocate_new_gaussians: true
+  branch_new_bone_seed_log_alpha: 0.0
+  branch_new_bone_seed_log_opacity: -2.0
+  split_new_bone_seed_count: 10
+  split_allocate_new_gaussians: true
+  split_new_bone_seed_log_alpha: 0.0
+  split_new_bone_seed_log_opacity: -2.0
+
+support:
+  split_after_topology_only: false
+  split_residual_threshold: 0.03
+  split_support_mass_threshold: 4.0
+  gradient_threshold: 0.0
+  gradient_score_weight: 0.0
+  split_fallback_topk: 3
+  split_fallback_min_score: 2.5
+  split_lambda_perturb: 0.08
+  split_log_scale_perturb: 0.08
+  split_max_generation: 3
+  split_max_per_update: 8
+  prune_support_mass_threshold: 0.8
+  prune_residual_threshold: 0.015
+  prune_min_gaussians_per_bone: 8
+  prune_max_per_update: 8
+  reset_opacity:
+    mode: soft_local_split_reset
+    alpha_mix: 1.0
+    q_mix: 0.0
+    target_log_opacity: -2.0
+    support_mass_threshold: 0.75
+    alpha_threshold: 0.08
+  ownership_refresh:
+    enabled: false
+    start_progress: 0.3636
+    interval_steps: 40
+    mode: bone_parent
+    scope: ambiguous
+    mixedness_threshold: 0.25
+    min_support_mass: 1.0
+    positive_logit: 8.0
+    negative_logit: -8.0
+
+topology:
+  freeze_after_step: null
+  candidate_residual_threshold: 0.03
+  candidate_support_mass_threshold: 2.0
+  candidate_fallback_topk: 6
+  candidate_fallback_min_score: 3.0
+  promotion_error_threshold: 0.03
+  rigid_error_threshold: 0.08
+  stability_checks: 1
+  split_stability_checks: 1
+  max_events_per_update: 3
+  stability_jaccard: 0.5
+  new_joint_logit: 3.0
+  other_joint_logit: -4.0
+  allow_internal_split: true
+  branch_coverage_threshold: 0.08
+  branch_low_coverage_ratio: 0.15
+  branch_explainability_gain_threshold: 0.0
+  branch_invalid_fit_residual_multiplier: 0.0
+  branch_invalid_fit_coverage_ratio: 0.0
+  branch_invalid_fit_topk: 0
+  branch_offaxis_radius_multiplier: 1.45
+  branch_component_knn: 12
+  branch_component_min_vertices: 10
+  branch_parent:
+    mode: mesh_interior_segment
+    fallback_to_segment: true
+    link_k: 3
+    attachment_mode: node
+    graph_sample_count: 12
+    surface_tol: 0.003
+    centerline_target_resolution: 72
+    centerline_min_leaf_length_ratio: 0.08
+    graph_cluster_ratio: 0.025
+    graph_min_segment_ratio: 0.0001
+    graph_edge_densify_ratio: 0.08
+    voxel_target_resolution: 72
+    voxel_narrow_span_voxels: 3.0
+    voxel_max_resolution: 192
+    voxel_neighbor_mode: "26"
+  branch_max_new_points: 3
+  branch_path_simplify_tolerance_ratio: 0.03
+  split_ratio_reference: mean_others
+  split_ratio_score_mode: gaussian_quantile_mean_meanT
+  split_ratio_threshold: 1.25
+  split_ratio_regularizer: 0.0
+  split_rigid_gain_threshold: 0.003
+  split_insert_lambda_min: 0.2
+  split_insert_lambda_max: 0.8
+  split_global_scan_same_round_after_branch: false
+  split_skip_inserted_rounds_after_birth: 1
+  split_old_bones_only: false
+  split_lineage_guard:
+    enabled: true
+    overlap_ratio_threshold: 0.9
+    recent_split_event_limit: 4
+  center_gradient_diagnostics_enabled: false
+  gradient_ema_beta: 0.9
+  gradient_rest_weight: 1.0
+  gradient_pose_weight: 0.15
+  proposal_integration:
+    arbitration_mode: legacy
+    normalization: log1p
+    term_weights:
+      evidence_term: 1.0
+      temporal_consistency_term: 1.0
+      explainability_gain_term: 1.0
+      incompatibility_penalty: 1.0
+  branch_pose_init_scale: 0.2
+  event_profile:
+    default:
+      settle_progress: 0.1591
+      rest_freeze_progress: 0.0455
+      inserted_rest_ramp_progress: 0.1136
+      inserted_rest_grad_scale: 0.25
+      post_rebalance_local_steps: 0
+    branch:
+      rebalance_delay_progress: 0.0909
+      inserted_pose_ramp_progress: 0.1364
+      inserted_pose_grad_scale: 0.25
+      rebalance_branch_vertex_k: 32
+      rebalance_parent_vertex_k: 40
+      rebalance_child_vertex_k: 28
+      rebalance_min_vertex_weight: 0.035
+      rebalance_pose_blend: 0.9
+      rebalance_parent_pose_scale: 1.0
+      rebalance_child_pose_scale: 0.75
+      rebalance_new_pose_scale: 0.9
+    split:
+      rebalance_delay_progress: 0.0909
+      inserted_pose_ramp_progress: 0.1364
+      inserted_pose_grad_scale: 1.0
+      protected_new_joint_floor: 0.0
+      rebalance_local_vertex_k: 96
+      rebalance_parent_vertex_k: 28
+      rebalance_joint_vertex_k: 32
+      rebalance_child_vertex_k: 28
+      rebalance_min_vertex_weight: 0.03
+      rebalance_pose_blend: 0.85
+      rebalance_parent_pose_scale: 0.9
+      rebalance_new_pose_scale: 0.95
+      rebalance_child_pose_scale: 0.85
+      rebalance_lambda_band: 0.18
+  guard:
+    branch_duplicate_cooldown_progress: 0.3636
+    branch_duplicate_distance_threshold: 0.12
+    branch_host_cooldown_progress: 0.5455
+  reparent_cleanup:
+    enabled: false
+    max_iters: 2
+    target_modes: [branch, split]
+    candidate_topk: 4
+    start_step: 320
+    end_step: 500
+    interval_steps: 20
+    scan_order: root_first
+    run_only_when_no_topology_event: true
+    final_loss_selection: true
+    final_loss_selection_min_unique_parents: 3
+    final_probe_steps: 40
+  postprocess_backup:
+    enabled: false
+    extra_steps: 200
+    gaussian_cleanup:
+      enabled: false
+      distance_threshold_ratio: 0.025
+      lambda_threshold: 0.08
+      low_support_mass_threshold: 0.6
+      low_residual_threshold: 0.02
+      min_gaussians_per_bone: 6
+      same_dominant_joint_only: true
+      post_cleanup_finetune_steps: 20
+    duplicate_merge:
+      enabled: false
+      distance_threshold_ratio: 0.055
+      inserted_only: false
+      max_merges: 8
+      post_merge_finetune_steps: 20
+  close_edge_merge_postprocess:
+    enabled: false
+    reference_mode: sample_radius
+    distance_threshold_ratio: 0.04
+    max_merges: 4
+    pre_merge_finetune_steps: 100
+    post_merge_finetune_steps: 100
+  split_local_guard:
+    enabled: false
+    relative_margin: 0.0
+  global_rebalance:
+    enabled: false
+    bootstrap_only: false
+    start_progress: 0.0
+    end_progress: 1.0
+    interval_steps: 100
+    offset_steps: 1
+    local_steps: 40
+    vertex_k: 32
+    min_vertex_weight: 0.03
+    pose_blend: 0.85
+    pose_scale: 0.9
+
+demo:
+  variant: missing_branch
+  frames: 32
+  radial_sections: 20
+  trunk_radius: 0.09
+  branch_radius: 0.07
+
+visualization:
+  save_training_trace: false
+  trace_mode: skeleton
+  trace_interval: 2
+  probe_frame: 12
+  motion_fps: 4
+  training_fps: 2
+
+schedules:
+  gaussian_strictness:
+    start_progress: 0.0
+    end_progress: 1.0
+    start_value: 1.0
+    end_value: 1.0
+  skeleton_anchor_scale:
+    start_progress: 0.0
+    end_progress: 1.0
+    start_value: 1.0
+    end_value: 0.35

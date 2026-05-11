@@ -5,7 +5,6 @@ import json
 import math
 import shutil
 import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -13,15 +12,11 @@ from typing import Any
 import numpy as np
 import trimesh
 import torch
-from pygltflib import GLTF2
 from scipy.spatial import cKDTree
 
 from evorig_next.io.real_glb import (
-    BONE_NAME_RE,
-    _compute_node_world_matrices,
     _load_real_preprocess_config,
     _preprocess_real_rig,
-    _read_accessor_dense,
 )
 from evorig_next.utils.mesh_ops import points_inside_or_on_mesh, project_points_inside_mesh
 
@@ -41,269 +36,358 @@ def _resolve_blender_path(blender_path: str | Path | None) -> str:
     raise FileNotFoundError("Blender executable not found; pass --blender-path")
 
 
-def _read_weight_accessor(gltf: GLTF2, accessor_index: int) -> np.ndarray:
-    values = _read_accessor_dense(gltf, accessor_index).astype(np.float32)
-    accessor = gltf.accessors[accessor_index]
-    if accessor.componentType == 5121 and (accessor.normalized or float(values.max(initial=0.0)) > 1.0):
-        values = values / 255.0
-    elif accessor.componentType == 5123 and (accessor.normalized or float(values.max(initial=0.0)) > 1.0):
-        values = values / 65535.0
-    return values
-
-
-def _bone_node_to_id(gltf: GLTF2) -> dict[int, int]:
-    numbered_nodes: list[tuple[int, int]] = []
-    for node_index, node in enumerate(gltf.nodes or []):
-        if not node.name:
-            continue
-        match = BONE_NAME_RE.match(str(node.name))
-        if match is not None:
-            numbered_nodes.append((int(match.group(1)), int(node_index)))
-    numbered_nodes.sort(key=lambda item: item[0])
-    return {node_index: dense_id for dense_id, (_, node_index) in enumerate(numbered_nodes)}
-
-
-def _extract_dense_bone_rig(rigged_glb_path: str | Path) -> dict[str, Any]:
-    gltf = GLTF2().load_binary(str(rigged_glb_path))
-    world_mats, parent_of = _compute_node_world_matrices(gltf)
-    numbered_nodes: list[tuple[int, int]] = []
-    for node_index, node in enumerate(gltf.nodes or []):
-        if not node.name:
-            continue
-        match = BONE_NAME_RE.match(str(node.name))
-        if match is not None:
-            numbered_nodes.append((int(match.group(1)), int(node_index)))
-    if not numbered_nodes:
-        raise ValueError(f"no bone_* nodes found in {rigged_glb_path}")
-    numbered_nodes.sort(key=lambda item: item[0])
-    node_to_dense = {node_index: dense_id for dense_id, (_, node_index) in enumerate(numbered_nodes)}
+def _build_rig_from_blender_armature_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    records = list(payload.get("records", []))
+    if not records:
+        raise ValueError("Blender armature payload has no bones")
+    record_by_name = {str(record["name"]): record for record in records}
     joints: list[dict[str, Any]] = []
-    for dense_id, (source_bone_id, node_index) in enumerate(numbered_nodes):
-        parent_node = parent_of[node_index]
-        parent_bone = -1
-        while parent_node is not None:
-            if parent_node in node_to_dense:
-                parent_bone = int(node_to_dense[parent_node])
-                break
-            parent_node = parent_of[parent_node]
-        position = world_mats[node_index][:3, 3].astype(np.float32)
+    head_joint_by_bone: dict[str, int] = {}
+    tail_joint_by_bone: dict[str, int] = {}
+    visiting: set[str] = set()
+
+    def add_joint(
+        position: Any,
+        *,
+        parent_id: int,
+        connected_to_parent: bool,
+        name: str,
+        bone_name: str,
+        endpoint: str,
+    ) -> int:
+        joint_id = len(joints)
         joints.append(
             {
-                "id": int(dense_id),
-                "parent_id": int(parent_bone),
-                "connected_to_parent": bool(parent_bone >= 0),
-                "rest_position": position.tolist(),
+                "id": int(joint_id),
+                "parent_id": int(parent_id),
+                "connected_to_parent": bool(connected_to_parent and parent_id >= 0),
+                "rest_position": np.asarray(position, dtype=np.float32).astype(float).tolist(),
                 "birth_step": 0,
                 "is_inserted": False,
                 "birth_mode": "seed",
-                "name": str(gltf.nodes[node_index].name),
-                "source_node_id": int(node_index),
-                "source_bone_id": int(source_bone_id),
+                "name": str(name),
+                "source_bone_name": str(bone_name),
+                "source_endpoint": str(endpoint),
             }
         )
-    return {"joints": joints}
+        return joint_id
+
+    def ensure_bone(bone_name: str) -> None:
+        if bone_name in tail_joint_by_bone:
+            return
+        if bone_name in visiting:
+            raise ValueError(f"cycle detected in armature bone hierarchy at {bone_name}")
+        if bone_name not in record_by_name:
+            raise KeyError(bone_name)
+        visiting.add(bone_name)
+        record = record_by_name[bone_name]
+        parent_name = record.get("parent_name")
+        if parent_name is not None and str(parent_name) in record_by_name:
+            ensure_bone(str(parent_name))
+            parent_tail = tail_joint_by_bone[str(parent_name)]
+            if bool(record.get("use_connect", False)):
+                head_joint = parent_tail
+            else:
+                head_joint = add_joint(
+                    record["head"],
+                    parent_id=parent_tail,
+                    connected_to_parent=False,
+                    name=f"{bone_name}_head",
+                    bone_name=bone_name,
+                    endpoint="head",
+                )
+        else:
+            head_joint = add_joint(
+                record["head"],
+                parent_id=-1,
+                connected_to_parent=False,
+                name=f"{bone_name}_head",
+                bone_name=bone_name,
+                endpoint="head",
+            )
+        tail_joint = add_joint(
+            record["tail"],
+            parent_id=head_joint,
+            connected_to_parent=True,
+            name=f"{bone_name}_tail",
+            bone_name=bone_name,
+            endpoint="tail",
+        )
+        head_joint_by_bone[bone_name] = int(head_joint)
+        tail_joint_by_bone[bone_name] = int(tail_joint)
+        visiting.remove(bone_name)
+
+    for record in records:
+        ensure_bone(str(record["name"]))
+
+    connected_edge_count = sum(
+        bool(joint.get("connected_to_parent", False)) and int(joint.get("parent_id", -1)) >= 0
+        for joint in joints
+    )
+    dashed_edge_count = sum(
+        (not bool(joint.get("connected_to_parent", False))) and int(joint.get("parent_id", -1)) >= 0
+        for joint in joints
+    )
+    summary = {
+        "enabled": True,
+        "source": payload.get("source", ""),
+        "armature_name": payload.get("armature_name", ""),
+        "bone_count": int(len(records)),
+        "joint_count": int(len(joints)),
+        "connected_edge_count": int(connected_edge_count),
+        "dashed_hierarchy_edge_count": int(dashed_edge_count),
+        "bone_head_joint_by_name": {key: int(value) for key, value in head_joint_by_bone.items()},
+        "bone_tail_joint_by_name": {key: int(value) for key, value in tail_joint_by_bone.items()},
+        "records": records,
+    }
+    return {"joints": joints}, summary
 
 
-def _extract_fbx_connectivity(
-    skeleton_fbx_path: str | Path,
+def _map_skin_weights_to_rig_joints(
+    weights: np.ndarray,
+    skin_joint_names: list[str],
+    rig_json: dict[str, Any],
+    armature_summary: dict[str, Any],
+) -> tuple[np.ndarray, dict[str, Any]]:
+    joint_count = len(rig_json.get("joints", []))
+    mapped = np.zeros((int(weights.shape[0]), int(joint_count)), dtype=np.float32)
+    head_by_name = {str(key): int(value) for key, value in armature_summary.get("bone_head_joint_by_name", {}).items()}
+    matched = 0
+    missing: list[str] = []
+    for source_id, name in enumerate(skin_joint_names):
+        if source_id >= int(weights.shape[1]):
+            break
+        target = head_by_name.get(str(name))
+        if target is None or target < 0 or target >= joint_count:
+            missing.append(str(name))
+            continue
+        mapped[:, target] += weights[:, source_id]
+        matched += 1
+    return mapped, {
+        "source": "skin joint columns mapped to Blender bone head joints by bone name",
+        "input_shape": [int(weights.shape[0]), int(weights.shape[1])],
+        "output_shape": [int(mapped.shape[0]), int(mapped.shape[1])],
+        "skin_joint_count": int(len(skin_joint_names)),
+        "matched_skin_joint_count": int(matched),
+        "missing_skin_joint_count": int(len(missing)),
+        "missing_skin_joint_names": missing[:64],
+    }
+
+
+def _run_blender_extract_rigged_scene(
     *,
-    blender_path: str | Path | None = None,
-) -> dict[int, bool]:
-    skeleton_fbx_path = Path(skeleton_fbx_path)
-    if not skeleton_fbx_path.exists():
-        return {}
-    blender = _resolve_blender_path(blender_path)
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as handle:
-        script_path = Path(handle.name)
-        handle.write(
-            r'''
+    rigged_glb_path: str | Path,
+    blender_path: str | Path | None,
+    cache_dir: Path,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    scene_npz = cache_dir / "rigged_rest_scene_blender.npz"
+    report_json = cache_dir / "rigged_rest_scene_report.json"
+    if not scene_npz.exists():
+        with tempfile.NamedTemporaryFile("w", suffix=".py", delete=False, encoding="utf-8") as handle:
+            script_path = Path(handle.name)
+            handle.write(
+                r'''
 import json
-import re
 import sys
 from pathlib import Path
 
 import bpy
+import numpy as np
+from mathutils import Vector
 
-fbx = Path(sys.argv[-2])
-out = Path(sys.argv[-1])
-bpy.ops.object.delete()
-bpy.ops.import_scene.fbx(filepath=str(fbx))
-arms = [obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"]
-if not arms:
-    raise SystemExit(f"no armature found in {fbx}")
-arm = max(arms, key=lambda obj: len(obj.data.bones))
-bone_name_re = re.compile(r"^bone[_\.\-\s]*(\d+)$", re.IGNORECASE)
-records = []
-for bone in arm.data.bones:
-    match = bone_name_re.match(str(bone.name))
-    if match is None:
-        continue
-    source_bone_id = int(match.group(1))
-    parent = bone.parent
-    parent_source_bone_id = -1
-    if parent is not None:
-        parent_match = bone_name_re.match(str(parent.name))
-        if parent_match is not None:
-            parent_source_bone_id = int(parent_match.group(1))
-    records.append({
-        "source_bone_id": source_bone_id,
-        "parent_source_bone_id": parent_source_bone_id,
-        "connected_to_parent": bool(bone.use_connect and parent_source_bone_id >= 0),
-        "name": str(bone.name),
-    })
-out.write_text(json.dumps({"records": records}, indent=2), encoding="utf-8")
-'''
-        )
-    output_json = skeleton_fbx_path.with_suffix(".connectivity.tmp.json")
+
+def _clear_scene():
+    bpy.ops.object.select_all(action="SELECT")
+    bpy.ops.object.delete()
+    for collection in (bpy.data.meshes, bpy.data.materials, bpy.data.armatures, bpy.data.actions):
+        for item in list(collection):
+            if item.users == 0:
+                collection.remove(item)
+
+
+def _mesh_bounds(objects):
+    points = []
+    for obj in objects:
+        for corner in obj.bound_box:
+            points.append(obj.matrix_world @ Vector(corner))
+    if not points:
+        return None
+    mins = [float(min(p[i] for p in points)) for i in range(3)]
+    maxs = [float(max(p[i] for p in points)) for i in range(3)]
+    return {"min": mins, "max": maxs, "extent": [float(maxs[i] - mins[i]) for i in range(3)]}
+
+
+def _is_unwanted_helper_mesh(obj):
+    if obj.type != "MESH":
+        return False
+    if obj.parent is not None or obj.modifiers:
+        return False
+    if len(obj.data.materials) != 0:
+        return False
+    if not obj.name.lower().startswith("icosphere"):
+        return False
+    if len(obj.data.polygons) != 80:
+        return False
+    bounds = _mesh_bounds([obj])
+    if bounds is None:
+        return False
+    extent = bounds["extent"]
+    center = [(bounds["min"][i] + bounds["max"][i]) * 0.5 for i in range(3)]
+    return all(abs(value) < 1e-4 for value in center) and all(1.8 <= value <= 2.1 for value in extent)
+
+
+def _evaluated_mesh_arrays(obj):
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = obj.evaluated_get(depsgraph)
     try:
-        cmd = [str(blender), "--background", "--python", str(script_path), "--", str(skeleton_fbx_path), str(output_json)]
-        subprocess.run(cmd, check=True)
-        payload = json.loads(output_json.read_text(encoding="utf-8"))
-    finally:
-        try:
-            script_path.unlink()
-        except OSError:
-            pass
-        try:
-            output_json.unlink()
-        except OSError:
-            pass
-    return {
-        int(record["source_bone_id"]): bool(record["connected_to_parent"])
-        for record in payload.get("records", [])
-    }
+        mesh = bpy.data.meshes.new_from_object(evaluated, preserve_all_data_layers=True, depsgraph=depsgraph)
+    except TypeError:
+        mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=depsgraph)
+    mesh.transform(evaluated.matrix_world)
+    mesh.update()
+    vertices = np.asarray([vertex.co[:] for vertex in mesh.vertices], dtype=np.float32)
+    faces = np.asarray([polygon.vertices[:] for polygon in mesh.polygons], dtype=np.int64)
+    bpy.data.meshes.remove(mesh)
+    if faces.ndim != 2 or (faces.size and faces.shape[1] != 3):
+        raise RuntimeError(f"non-triangular evaluated mesh in object {obj.name}")
+    return vertices, faces
 
 
-def _apply_fbx_connectivity_override(
-    rig_json: dict[str, Any],
-    connectivity_by_source_bone: dict[int, bool],
-) -> tuple[dict[str, Any], dict[str, Any]]:
-    if not connectivity_by_source_bone:
-        return rig_json, {"enabled": False, "reason": "missing_fbx_connectivity"}
-    updated = {key: value for key, value in rig_json.items() if key != "joints"}
-    joints = [dict(joint) for joint in rig_json.get("joints", [])]
-    changed = 0
-    missing = 0
-    false_count = 0
-    true_count = 0
-    for joint in joints:
-        source_id = int(joint.get("source_bone_id", joint.get("id", -1)))
-        parent_id = int(joint.get("parent_id", -1))
-        if source_id not in connectivity_by_source_bone:
-            missing += 1
-            joint["connected_to_parent"] = bool(joint.get("connected_to_parent", parent_id >= 0)) and parent_id >= 0
-            continue
-        new_value = bool(connectivity_by_source_bone[source_id]) and parent_id >= 0
-        old_value = bool(joint.get("connected_to_parent", parent_id >= 0)) and parent_id >= 0
-        if new_value != old_value:
-            changed += 1
-        joint["connected_to_parent"] = new_value
-        true_count += int(new_value)
-        false_count += int(not new_value)
-    updated["joints"] = joints
-    return updated, {
-        "enabled": True,
-        "source": "skeleton.fbx use_connect",
-        "changed_edge_count": int(changed),
-        "missing_source_bone_count": int(missing),
-        "connected_true_count": int(true_count),
-        "connected_false_count": int(false_count),
-    }
+def main():
+    src = Path(sys.argv[-3])
+    out_npz = Path(sys.argv[-2])
+    out_json = Path(sys.argv[-1])
+    out_npz.parent.mkdir(parents=True, exist_ok=True)
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    _clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(src))
+    arms = [obj for obj in bpy.context.scene.objects if obj.type == "ARMATURE"]
+    if not arms:
+        raise SystemExit(f"no armature found in {src}")
+    arm = max(arms, key=lambda obj: len(obj.data.bones))
+    arm.data.pose_position = "REST"
+    bpy.context.scene.frame_set(int(bpy.context.scene.frame_start))
+    bpy.context.view_layer.update()
 
+    bone_names = [str(bone.name) for bone in arm.data.bones]
+    bone_to_col = {name: idx for idx, name in enumerate(bone_names)}
+    records = []
+    for bone_index, bone in enumerate(arm.data.bones):
+        parent = bone.parent
+        head_world = arm.matrix_world @ bone.head_local
+        tail_world = arm.matrix_world @ bone.tail_local
+        records.append({
+            "bone_index": int(bone_index),
+            "name": str(bone.name),
+            "parent_name": str(parent.name) if parent is not None else None,
+            "use_connect": bool(bone.use_connect),
+            "head": [float(value) for value in head_world],
+            "tail": [float(value) for value in tail_world],
+        })
 
-def _load_rigged_mesh_and_skin(rigged_glb_path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
-    gltf = GLTF2().load_binary(str(rigged_glb_path))
-    world_mats, _ = _compute_node_world_matrices(gltf)
-    node_to_bone = _bone_node_to_id(gltf)
-    if not node_to_bone:
-        raise ValueError(f"no bone_* nodes found in {rigged_glb_path}")
-    joint_count = max(node_to_bone.values()) + 1
+    all_meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
+    skipped_meshes = [obj for obj in all_meshes if _is_unwanted_helper_mesh(obj)]
+    mesh_objects = [obj for obj in all_meshes if obj not in skipped_meshes]
+    mesh_objects.sort(key=lambda obj: obj.name)
+    if not mesh_objects:
+        raise SystemExit(f"no mesh objects found in {src}")
 
-    vertices_chunks: list[np.ndarray] = []
-    faces_chunks: list[np.ndarray] = []
-    weights_chunks: list[np.ndarray] = []
-    primitive_reports: list[dict[str, Any]] = []
+    vertices_chunks = []
+    faces_chunks = []
+    weights_chunks = []
+    reports = []
     vertex_offset = 0
-
-    for node_index, node in enumerate(gltf.nodes or []):
-        if node.mesh is None:
-            continue
-        mesh = gltf.meshes[int(node.mesh)]
-        node_world = world_mats[node_index].astype(np.float32)
-        skin = gltf.skins[int(node.skin)] if node.skin is not None and gltf.skins else None
-        skin_joints = [int(item) for item in (skin.joints if skin is not None else [])]
-
-        for primitive_index, primitive in enumerate(mesh.primitives or []):
-            attrs = primitive.attributes
-            if attrs is None or attrs.POSITION is None:
-                continue
-            positions = _read_accessor_dense(gltf, int(attrs.POSITION)).astype(np.float32)
-            homogeneous = np.concatenate([positions, np.ones((positions.shape[0], 1), dtype=np.float32)], axis=1)
-            positions_world = (homogeneous @ node_world.T)[:, :3].astype(np.float32)
-
-            if primitive.indices is None:
-                if positions.shape[0] % 3 != 0:
-                    raise ValueError(f"primitive {primitive_index} has no indices and non-triangle vertex count")
-                faces = np.arange(positions.shape[0], dtype=np.int64).reshape(-1, 3)
-            else:
-                indices = _read_accessor_dense(gltf, int(primitive.indices)).astype(np.int64).reshape(-1)
-                if indices.shape[0] % 3 != 0:
-                    raise ValueError(f"primitive {primitive_index} index count is not divisible by 3")
-                faces = indices.reshape(-1, 3)
-            faces_chunks.append(faces + vertex_offset)
-            vertices_chunks.append(positions_world)
-
-            dense_weights = np.zeros((positions.shape[0], joint_count), dtype=np.float32)
-            joints_accessor = getattr(attrs, "JOINTS_0", None)
-            weights_accessor = getattr(attrs, "WEIGHTS_0", None)
-            if joints_accessor is not None and weights_accessor is not None and skin_joints:
-                local_joint_ids = _read_accessor_dense(gltf, int(joints_accessor)).astype(np.int64)
-                local_weights = _read_weight_accessor(gltf, int(weights_accessor)).astype(np.float32)
-                if local_joint_ids.shape != local_weights.shape:
-                    raise ValueError(f"JOINTS_0 shape {local_joint_ids.shape} != WEIGHTS_0 shape {local_weights.shape}")
-                for influence_index in range(local_joint_ids.shape[1]):
-                    local_ids = local_joint_ids[:, influence_index]
-                    influence_weights = local_weights[:, influence_index]
-                    for skin_joint_local in np.unique(local_ids):
-                        skin_joint_local = int(skin_joint_local)
-                        if skin_joint_local < 0 or skin_joint_local >= len(skin_joints):
-                            continue
-                        bone_node = skin_joints[skin_joint_local]
-                        bone_id = node_to_bone.get(int(bone_node))
-                        if bone_id is None:
-                            continue
-                        mask = local_ids == skin_joint_local
-                        dense_weights[mask, int(bone_id)] += influence_weights[mask]
-                row_sum = dense_weights.sum(axis=1, keepdims=True)
-                active = row_sum[:, 0] > 1.0e-8
-                dense_weights[active] = dense_weights[active] / row_sum[active]
-            weights_chunks.append(dense_weights)
-            primitive_reports.append(
-                {
-                    "node_index": int(node_index),
-                    "node_name": str(node.name or ""),
-                    "mesh_index": int(node.mesh),
-                    "primitive_index": int(primitive_index),
-                    "vertex_count": int(positions_world.shape[0]),
-                    "face_count": int(faces.shape[0]),
-                    "has_skin_weights": bool(dense_weights.sum() > 0.0),
-                }
+    for obj in mesh_objects:
+        vertices, faces = _evaluated_mesh_arrays(obj)
+        if int(len(obj.data.vertices)) != int(vertices.shape[0]):
+            raise RuntimeError(
+                f"evaluated vertex count changed for {obj.name}: source={len(obj.data.vertices)}, evaluated={vertices.shape[0]}"
             )
-            vertex_offset += int(positions_world.shape[0])
+        dense_weights = np.zeros((int(vertices.shape[0]), len(bone_names)), dtype=np.float32)
+        vertex_groups = {int(group.index): str(group.name) for group in obj.vertex_groups}
+        for vertex in obj.data.vertices:
+            row = int(vertex.index)
+            for group_ref in vertex.groups:
+                group_name = vertex_groups.get(int(group_ref.group))
+                col = bone_to_col.get(str(group_name))
+                if col is not None:
+                    dense_weights[row, int(col)] += float(group_ref.weight)
+        row_sum = dense_weights.sum(axis=1, keepdims=True)
+        active = row_sum[:, 0] > 1.0e-8
+        dense_weights[active] = dense_weights[active] / row_sum[active]
+        vertices_chunks.append(vertices)
+        faces_chunks.append(faces + vertex_offset)
+        weights_chunks.append(dense_weights)
+        reports.append({
+            "name": str(obj.name),
+            "vertex_count": int(vertices.shape[0]),
+            "face_count": int(faces.shape[0]),
+            "vertex_group_count": int(len(obj.vertex_groups)),
+            "skinned_vertex_count": int(active.sum()),
+        })
+        vertex_offset += int(vertices.shape[0])
 
-    if not vertices_chunks:
-        raise ValueError(f"no mesh primitives found in {rigged_glb_path}")
     vertices = np.concatenate(vertices_chunks, axis=0).astype(np.float32)
     faces = np.concatenate(faces_chunks, axis=0).astype(np.int64)
     weights = np.concatenate(weights_chunks, axis=0).astype(np.float32)
+    np.savez_compressed(
+        out_npz,
+        vertices=vertices,
+        faces=faces,
+        weights=weights,
+        bone_names=np.asarray(bone_names),
+    )
     report = {
-        "primitive_count": int(len(primitive_reports)),
-        "primitives": primitive_reports,
-        "joint_count": int(joint_count),
+        "source": str(src),
+        "armature_name": str(arm.name),
+        "bone_count": int(len(bone_names)),
+        "skin_joint_names": bone_names,
+        "joint_count": int(len(bone_names)),
         "vertex_count": int(vertices.shape[0]),
         "face_count": int(faces.shape[0]),
         "skinned_vertex_count": int((weights.sum(axis=1) > 1.0e-8).sum()),
+        "mesh_objects": reports,
+        "source_mesh_objects": int(len(all_meshes)),
+        "baked_mesh_objects": int(len(mesh_objects)),
+        "skipped_mesh_objects": [str(obj.name) for obj in skipped_meshes],
+        "bounds": _mesh_bounds(mesh_objects),
+        "armature_payload": {
+            "source": str(src),
+            "armature_name": str(arm.name),
+            "records": records,
+        },
     }
+    out_json.write_text(json.dumps(report, indent=2), encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
+'''
+            )
+        try:
+            cmd = [
+                _resolve_blender_path(blender_path),
+                "--background",
+                "--python",
+                str(script_path),
+                "--",
+                str(rigged_glb_path),
+                str(scene_npz),
+                str(report_json),
+            ]
+            subprocess.run(cmd, check=True)
+        finally:
+            try:
+                script_path.unlink()
+            except OSError:
+                pass
+    data = np.load(scene_npz, allow_pickle=True)
+    vertices = np.asarray(data["vertices"], dtype=np.float32)
+    faces = np.asarray(data["faces"], dtype=np.int64)
+    weights = np.asarray(data["weights"], dtype=np.float32)
+    report = json.loads(report_json.read_text(encoding="utf-8")) if report_json.exists() else {}
+    report["skin_joint_names"] = [str(item) for item in data["bone_names"].tolist()]
     return vertices, faces, weights, report
 
 
@@ -729,7 +813,11 @@ def import_unirig_dynamic_sample(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     cache_dir = output_dir / "_import_cache"
-    rest_vertices_raw, faces, unirig_weights, mesh_report = _load_rigged_mesh_and_skin(rigged_glb_path)
+    rest_vertices_raw, faces, unirig_weights, mesh_report = _run_blender_extract_rigged_scene(
+        rigged_glb_path=rigged_glb_path,
+        blender_path=blender_path,
+        cache_dir=cache_dir,
+    )
     dynamic_frames_raw, dynamic_faces_raw, source_times, bake_report = _run_blender_bake(
         dynamic_glb_path=dynamic_glb_path,
         blender_path=blender_path,
@@ -800,20 +888,21 @@ def import_unirig_dynamic_sample(
     rest_vertices = _apply_normalization(rest_vertices_raw, normalization)
     selected_frames = _apply_normalization(selected_frames_raw, normalization)
 
-    rig_json_raw = _extract_dense_bone_rig(rigged_glb_path)
-    fbx_connectivity_summary: dict[str, Any] = {"enabled": False, "reason": "missing_skeleton_fbx"}
-    skeleton_fbx_path = source_dir / "skeleton.fbx"
-    if skeleton_fbx_path.exists():
-        fbx_connectivity = _extract_fbx_connectivity(skeleton_fbx_path, blender_path=blender_path)
-        rig_json_raw, fbx_connectivity_summary = _apply_fbx_connectivity_override(
-            rig_json_raw,
-            fbx_connectivity,
-        )
+    rig_json_raw, armature_import_summary = _build_rig_from_blender_armature_payload(
+        dict(mesh_report.get("armature_payload", {}))
+    )
+    armature_import_summary["selected_source"] = "rigged.glb_blender_scene"
     for joint in rig_json_raw["joints"]:
         joint["rest_position"] = _apply_normalization(
             np.asarray(joint["rest_position"], dtype=np.float32).reshape(1, 3),
             normalization,
         ).reshape(3).astype(float).tolist()
+    unirig_weights_for_rig, skin_mapping_summary = _map_skin_weights_to_rig_joints(
+        unirig_weights,
+        [str(item) for item in mesh_report.get("skin_joint_names", [])],
+        rig_json_raw,
+        armature_import_summary,
+    )
     preprocess_cfg = _load_real_preprocess_config(config_template_path)
     surface_tol = float(preprocess_cfg.get("surface_tol", 3.0e-3))
     rig_json_projected, joint_projection_summary = _project_rig_joints_inside_mesh(
@@ -829,7 +918,7 @@ def import_unirig_dynamic_sample(
         faces=faces,
         preprocess_cfg=preprocess_cfg,
     )
-    cleaned_unirig_weights = _remap_skin_weights_after_cleanup(unirig_weights, rig_cleanup_summary)
+    cleaned_unirig_weights = _remap_skin_weights_after_cleanup(unirig_weights_for_rig, rig_cleanup_summary)
     normalized_diag = float(np.linalg.norm(rest_vertices.max(axis=0) - rest_vertices.min(axis=0)))
     rig_json, cleaned_unirig_weights, degenerate_bone_summary = _collapse_degenerate_bones(
         rig_json,
@@ -893,10 +982,12 @@ def import_unirig_dynamic_sample(
         "normalization": normalization,
         "quality": quality,
         "rigged_mesh": mesh_report,
-        "fbx_connectivity_override": fbx_connectivity_summary,
+        "armature_import": armature_import_summary,
         "unirig_skin_weights": {
             "initial_shape": [int(unirig_weights.shape[0]), int(unirig_weights.shape[1])],
+            "mapped_shape": [int(unirig_weights_for_rig.shape[0]), int(unirig_weights_for_rig.shape[1])],
             "cleaned_shape": [int(cleaned_unirig_weights.shape[0]), int(cleaned_unirig_weights.shape[1])],
+            "mapping": skin_mapping_summary,
             "cleanup_policy": "removed joint columns are merged into target_joint_id and then deleted",
         },
         "blender_bake": bake_report,
