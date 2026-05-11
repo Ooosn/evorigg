@@ -1,3 +1,123 @@
+# Project output dirs (per docs/AGENTS.md)
 mygs/
+
+# Python bytecode / caches
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual envs
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Secrets / credentials
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+id_rsa
+id_rsa.pub
+*.token
+secrets.*
+credentials.*
+.netrc
+.aws/
+.ssh/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter / IPython
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# Logs / temp
+*.log
+*.tmp
+*.bak
+*.orig
+tmp/
+temp/
+logs/
+
+# Training / experiment artifacts
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.tflite
+*.h5
+*.hdf5
+*.npz
+*.npy
+*.pkl
+*.pickle
+checkpoints/
+runs/
+wandb/
+mlruns/
+tensorboard/
+events.out.tfevents.*
+lightning_logs/
+
+# 3D / mesh / scene data
+*.glb
+*.gltf
+*.obj
+*.fbx
+*.ply
+*.stl
+*.usd
+*.usdz
+*.dae
+*.abc
+*.bvh
+
+# Images / video (large binaries)
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.gif
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.7z
+*.rar
